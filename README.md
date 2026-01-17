@@ -1,2 +1,2 @@
 # When Takeovers Require Cognitive Control: Effects of Partial Automation and Cognitive Load on Driver-Initiated Responses to Traffic Hazards on Urban Roads
-This repsitory includes research data and R code associated with the research project.
+This repository contains the research data and R code associated with the project. The raw data used for preprocessing are not publicly available due to intellectual property restrictions. Further information can be obtained by contacting the author (tshq@leed.ac.uk).
