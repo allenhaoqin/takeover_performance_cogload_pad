@@ -1,0 +1,331 @@
+---
+title: "Models_and_Post-Hocs"
+format: html
+editor: visual
+---
+
+# Read Data
+
+```{r}
+library(readr)
+library(bestNormalize)
+library(emmeans)
+library(lme4)
+
+df = read_csv("dataset.csv")
+df$automation = factor(df$automation)
+df$nback = factor(df$nback)
+df$runNumber = factor(df$runNumber)
+contrasts(df$nback) <- contr.sum
+contrasts(df$automation) <- contr.sum
+contrasts(df$runNumber) <- contr.sum
+```
+
+# Reaction Time
+
+## Left Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="LEFT_PEDESTRIAN")
+
+LMM<-lmerTest::lmer(rt~ (automation+nback)^2+(1| subNumber), data=df2)
+
+anova(LMM)
+
+emmeans(LMM, ~ nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df = TRUE)
+```
+
+## Right Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="RIGHT_PEDESTRIAN")
+
+LMM<-lmerTest::lmer(rt~ automation*nback+(1 +nback||subNumber), data=df2)
+
+anova(LMM)
+
+emmeans(LMM, ~ nback|automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df = TRUE)
+
+emmeans(LMM, ~ automation|nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df = TRUE)
+
+```
+
+## Oncoming Vehicle
+
+```{r}
+
+df2 = subset(df,eventType=="ONCOMING_VEHICLES")
+
+yj_obj <- yeojohnson(df2$rt)
+df2$y_yj <- yj_obj$x.t
+
+LMM<- lmerTest::lmer (y_yj~ automation*nback+runNumber + (1 + nback || subNumber) ,data = df2)
+
+anova(LMM)
+
+linkfun_yj <- function(mu) as.numeric(predict(yj_obj, newdata = mu))
+linkinv_yj <- function(eta) as.numeric(predict(yj_obj, newdata = eta, inverse = TRUE))
+
+mu_eta_yj <- function(eta, eps = 1e-6) {
+  (linkinv_yj(eta + eps) - linkinv_yj(eta - eps)) / (2 * eps)
+}
+
+yj_link <- list(
+  linkfun = linkfun_yj,
+  linkinv = linkinv_yj,
+  mu.eta  = mu_eta_yj,
+  valideta = function(eta) TRUE,
+  name = "Yeo-Johnson (bestNormalize)"
+)
+
+emm <- emmeans(LMM, ~ runNumber)
+
+emm_bt <- regrid(update(emm, tran = yj_link))
+
+summary(emm_bt, infer = TRUE)
+
+pairs(emm_bt, adjust = "bonferroni") |>
+  summary(infer = TRUE)
+
+summary(emm)    
+summary(emm_bt)  
+
+```
+
+```{r}
+# Remove Two Trials Where Programming Errors Prevented Takeovers
+df = subset(df,!((subNumber==36&runNumber==1&eventType=="RIGHT_PEDESTRIAN")|(subNumber==11&runNumber==1&eventType=="RIGHT_PEDESTRIAN")))
+```
+
+# Reaction Type
+
+## Left Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="LEFT_PEDESTRIAN")
+
+GLMM <- glmer (steering ~ (automation+nback)^2+(1|subNumber), family=binomial
+               ,data = df2)
+
+car::Anova(GLMM)
+
+emmeans(GLMM, ~ automation|nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE)
+
+emmeans(GLMM, ~ nback|automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE)
+```
+
+## Right Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="RIGHT_PEDESTRIAN")
+
+GLMM <- glmer (steering ~ (automation+nback)^2+(1+nback||subNumber), family=binomial
+               ,data = df2)
+
+car::Anova(GLMM)
+
+emmeans(GLMM, ~ nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE)
+
+```
+
+## Oncoming Vehicles
+
+```{r}
+
+df2 = subset(df,eventType=="ONCOMING_VEHICLES")
+
+GLMM <- glmer (steering ~ (automation+nback)^2+(1|subNumber), family=binomial
+               ,data = df2)
+
+car::Anova(GLMM)
+
+```
+
+# Vehicular Jerk
+
+## Left Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="LEFT_PEDESTRIAN")
+
+LMM<-lmerTest::lmer(jerk~ (automation+nback)^2+runNumber+nback:runNumber+(1+automation||subNumber), data=df2)
+# 
+anova(LMM)
+# 
+emmeans(LMM, ~ automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df=TRUE,digits = 4)
+
+```
+
+## Right Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="RIGHT_PEDESTRIAN")
+
+yj_obj <- yeojohnson(df2$jerk)
+df2$y_yj <- yj_obj$x.t
+
+LMM<- lmerTest::lmer (y_yj~ automation*nback + (1+automation+nback| subNumber) ,data = df2)
+
+anova(LMM)
+
+linkfun_yj <- function(mu) as.numeric(predict(yj_obj, newdata = mu))
+linkinv_yj <- function(eta) as.numeric(predict(yj_obj, newdata = eta, inverse = TRUE)) 
+
+mu_eta_yj <- function(eta, eps = 1e-6) {
+  (linkinv_yj(eta + eps) - linkinv_yj(eta - eps)) / (2 * eps)
+}
+
+yj_link <- list(
+  linkfun = linkfun_yj,
+  linkinv = linkinv_yj,
+  mu.eta  = mu_eta_yj,
+  valideta = function(eta) TRUE,
+  name = "Yeo-Johnson (bestNormalize)"
+)
+
+emm <- emmeans(LMM, ~ automation)
+emm_bt <- regrid(update(emm, tran = yj_link))
+
+summary(emm_bt, infer = TRUE)
+
+pairs(emm_bt, adjust = "bonferroni") |>
+  summary(infer = TRUE)
+
+```
+
+## Oncoming Vehicles
+
+```{r}
+df2 = subset(df,eventType=="ONCOMING_VEHICLES")
+
+LMM<- lmerTest::lmer (jerk ~ automation*nback + (1| subNumber) ,data = df2)
+
+anova(LMM)
+
+emmeans(LMM, ~ automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE)
+
+```
+
+# Minimum TTC
+
+## Left Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="LEFT_PEDESTRIAN")
+
+LMM= lmerTest::lmer(minTTC~ automation + nback + runNumber+ (1+automation||
+    subNumber) +automation:nback + nback:runNumber,data=df2)
+
+anova(LMM)
+
+emmeans(LMM, ~ automation|nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df=TRUE,digits = 4)
+
+emmeans(LMM, ~ nback|automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df=TRUE,digits = 4)
+
+emmeans(LMM, ~ nback|runNumber) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df=TRUE,digits = 4)
+
+emmeans(LMM, ~ runNumber|nback) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE,infer.df=TRUE,digits = 4)
+
+```
+
+## Right Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="RIGHT_PEDESTRIAN")
+
+LMM= lmerTest::lmer(minTTC~ automation * nback + (1+automation+nback|
+    subNumber),data=df2)
+
+anova(LMM)
+
+emmeans(LMM, ~ automation) |>
+  contrast("pairwise", adjust = "bonferroni") |>
+  summary(infer = TRUE)
+```
+
+## Oncoming Vehicles
+
+```{r}
+df2 = subset(df,eventType=="ONCOMING_VEHICLES")
+
+GLMM <- glmmTMB::glmmTMB (minTTC ~ (automation+nback)^2+(1+automation+nback||subNumber), family = tweedie(link = "log"), data = df2)
+
+car::Anova(GLMM)
+
+emmeans(GLMM, ~ automation) |>
+  contrast("pairwise", adjust = "bonferroni",type='response') |>
+  summary(infer = TRUE)
+
+```
+
+# Crash Probability
+
+## Left Pedestrian
+
+```{r}
+
+df2 = subset(df,eventType=="LEFT_PEDESTRIAN")
+
+GLMM <- glmer (crash ~ (automation+nback)^2+(1|subNumber), family=binomial, data = df2)
+
+car::Anova(GLMM)
+```
+
+## Right Pedestrian
+
+```{r}
+df2 = subset(df,eventType=="RIGHT_PEDESTRIAN")
+
+GLMM <- glmer (crash ~ (automation+nback)^2+(1|subNumber), family=binomial, data = df2)
+
+car::Anova(GLMM)
+```
+
+## Oncoming Vehicles
+
+```{r}
+df2 = subset(df,eventType=="ONCOMING_VEHICLES")
+df2$automation <- relevel(df2$automation, ref = "PAD")
+
+GLMM <- glmer (crash ~ (automation+nback)^2+runNumber+automation:runNumber+(1|subNumber), family=binomial, data = df2, control = glmerControl(
+                 optimizer = "bobyqa"))
+
+car::Anova(GLMM)
+
+emmeans(GLMM, ~ automation) |>
+  contrast("pairwise", adjust = "bonferroni", type="response") |>
+  summary(infer = TRUE)
+
+```
