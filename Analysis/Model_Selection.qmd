@@ -13,7 +13,7 @@ library(lme4)
 library(DHARMa)
 
 # Backwards elimination started from a full model
-GLMM <- lme4::lmer (rt ~ (automation+nback+runNumber)^2+(1+automation+nback|subNumber),data = df2,REML=FALSE)
+GLMM <- lme4::lmer (rt ~ (automation+nback)^2+runNumber+Age+automation:runNumber+nback:runNumber+automation:Age+nback:Age+(1+automation+nback|subNumber),data = df2,REML=FALSE)
 
 # Get and compare xxxxx,
 drop1(GLMM,test="Chisq")
@@ -22,6 +22,10 @@ drop1(GLMM,test="Chisq")
 GLMM <- update(GLMM, .~. -automation:runNumber)
 GLMM <- update(GLMM, .~. -nback:runNumber)
 GLMM <- update(GLMM, .~. -runNumber)
+GLMM <- update(GLMM, .~. -automation:Age)
+GLMM <- update(GLMM, .~. -nback:Age)
+GLMM <- update(GLMM, .~. -Age)
+
 
 # Q-Q plots and Residual Plots
 res = simulateResiduals(GLMM)
